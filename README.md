@@ -1,20 +1,17 @@
 # Argument mining with BiLSTM
 Implementación de una red BiLSTM-CNN-CRF usada para Sequence Tagging. Adaptación para Argument Mining. Flexibilización de input y reporte de hiperparametros.
 
-## Objetivos
-Basandonos en los repositorios de [UKPLab](https://github.com/UKPLab):
+## Corpus
+El corpus fue tomado de los repositorios de UKPLab y puede encontrarse en ```/data```. El idioma utilizado es Inglés y estas son las dimensiones:
 
-- https://github.com/UKPLab/acl2017-neural_end2end_am
-- https://github.com/UKPLab/emnlp2017-bilstm-cnn-crf
-
-Adaptar el código para..
-- Desarrollar un entorno para la identificación y etiquetado de argumentos en textos del idioma inglés.
-- Proponer alternativas de embeddings distintos para entrenamiento/evaluación.
-- Flexibilizar input para formato texto o formato CoNLL.
-- Reportar resultados con diversos parámetros.
+|                | train  | test  |
+|----------------|--------|-------|
+| essayLevel     | 322    | 80    |
+| paragraphLevel | 1786   | 449   |
+| Tokens         | 118648 | 29538 |
 
 ## Arquitectura
-TODO
+![Arquitectura de la red](arch.jpeg)
 
 
 ## Instrucciones para su uso
@@ -35,14 +32,14 @@ Se proponen 2 tipos de datasets.
 Ambos dataset estas listos y dispuestos en formato CoNLL para ser entrenados. **dev.txt, train.txt** para entrenar la red y **test.txt** para probar los resultados.
 
 ### Mas archivos de evaluación
-Si se necesitaran mas ejemplos de archivos pueden obtenerse [aqui](https://www.ukp.tudarmstadt.de/fileadmin/user_upload/Group_UKP/data/argument-recognition/ArgumentAnnotatedEssays-1.0.zip)
+Si se necesitaran mas ejemplos de archivos pueden obtenerse [https://www.ukp.tudarmstadt.de/fileadmin/user_upload/Group_UKP/data/argument-recognition/ArgumentAnnotatedEssays-1.0.zip](https://www.ukp.tudarmstadt.de/fileadmin/user_upload/Group_UKP/data/argument-recognition/ArgumentAnnotatedEssays-1.0.zip)
 
 O correr el script siguiente y los tendrán disponibles en **example_essays** en su formato *.txt* para ser evaluados y comparados con su archivo etiquetado *.ann*
 ```
 $ download_examples
 ```
 
-### Obtener modelo entrenado.
+### Obtener modelo entrenado
 Para entrenar un modelo correr el siguiente comando
 ```
 $ python Train_AM.py [dataset] [embedding] [opts]
@@ -53,29 +50,65 @@ donde las opciones para cada parametro se detallan debajo.
 - **embedding**: levy, word2vec, glove
 - **[opts]**: --optimizer, --classifier, --cnn , --help
 
-TODO: marcar como se guardan los modelos entrenados y cuando corta el entrenamiento(>5 epochs without changes).
+Durante el entrenamiento, al final de cada época, se evalúa el F1. Si éste es mayor que el máximo F1 que se venía registrando anteriormente, se guarda el nuevo modelo en el directorio models.
+
+Si al cabo de cinco épocas (por default) no se obtienen mejoras en F1, entonces se termina el entrenamiento.
 
 ### Etiquetar texto con modelo entrenado
 
 Para etiquetar texto ajeno con un modelo preentrenado ejecutar el comando RunModel de la siguiente forma.
 ```
-$ python RunModel /models/[dataset]/AM_TAG/[selectedModel].h5 [input.txt]
+$ python RunModel.py /models/[dataset]/AM_TAG/[selectedModel].h5 [input.txt]
 ```
-El etiquetado se imprimirá por stdout, aunque si un archivo de salida fuera necesario es posbile su redirección concatenando ```> [output_file]```
+El etiquetado se imprimirá por stdout, aunque si un archivo de salida fuera necesario es posible su redirección concatenando ```> [output_file]```
 
 ### Evaluar eficiencia
-TODO: generar eval.py que evalue los output etiquetados comparandolos con los reales. True vs predicted y reporte los errores
+
+Para evaluar eficiencia podemos comparar las etiquetas del output generado por RunModel y las etiquetas verdaderas del texto utilizado para correr el modelo.
+Para ello ejecutamos:
+```
+$ python Eval.py [tagged_text] [model_output] [results.txt]
+```
+Se guardarán los resultados en results.txt y serán de la forma: 
+```
+Tag errors found: 112 (0.73% acc)
+
+Errors:
+Line: 111,	 Word: through, Tag: Claim, Pred: O
+Line: 112,	 Word: cooperation, Tag: Claim, Pred: O
+Line: 113,	 Word: ,, Tag: Claim, Pred: O
+Line: 118,	 Word: interpersonal, Tag: Claim, Pred: Premise
+.
+.
+.
+```
 
 ## Adaptacion de input:
-TODO: Generar en RunModel si pasan un texto en connl el raw para ingresarlo a la red
+
+En caso de que se ejecute RunModel con un texto en formato CoNLL, se generará automáticamente un nuevo archivo con el texto crudo con el cual se correrá el modelo.
 
 ## Análisis de resultados
-TODO
-- Con simple tagging
-	2 embeddings
-	3 optimizers
-- full taggin
-    same 2 embeddings 3 optimizers
-    con cnn
-    con cnn y crf
+
+| am_simplest 	              | f1 promedio(dev) | f1 promedio(test) | epochs model |
+|-----------------------------|------------------|-------------------|--------------|
+| crf-adam             	      | 0.71             | 0.71              | 34 epochs    |
+| softmax-nadam               | 0.72             | 0.73              | 20 epochs    |
+| softmax-sgd                 | 0.48             | 0.50           	 | 44 epochs    |
+| crf-nadam (levy)            | 0.71             | 0.70        	     | 32 epochs    |
+| softmax-nadam (glove 100d)  | 0.69             | 0.70        	     | 34 epochs    |
+| softmax-nadam-paragraph     | 0.70             | 0.72        	     | 16 epochs    |
+| softmax-nadam-paragraph(cnn)| 0.71             | 0.74        	     | 27 epochs    |
+	
+
+| am_full(levy)               | f1 promedio(dev) | f1 promedio(test) | epochs model |
+|-----------------------------|------------------|-------------------|--------------|
+| charEmbedding(lstm)-crf     | 0.46             | 0.68              | 20 epochs    |
+| charEmbedding(cnn)-crf      | 0.48             | 0.46              | 39 epochs    |
+| charEmbeddings(cnn)-softmax | 0.46             | 0.71              | 23 epochs    |
+| softmax                     | 0.44             | 0.47              | 49 epochs    |
+| softmax-paragraph(cnn)      | 0.51             | 0.56              | 28 epochs    |
+
+
+## Contexto del trabajo
+### [Presentación de materia Data Minning FaMAF 2017](AM_Project.ipynb)
 
